@@ -1,69 +1,62 @@
-import 'package:agendamento/controller/notificacaodb.dart';
-import 'package:agendamento/model/agendamento.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:agendamento/model/agendamento.dart';
 
 class AgendamentoDBController {
-  final CollectionReference _db = FirebaseFirestore.instance.collection("Agendamento");
-  final CollectionReference _notificacoes = FirebaseFirestore.instance.collection("Notificacoes");
-  final NotificacaoDB _notificacaoDB = NotificacaoDB(); // Instância correta da classe de notificações
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
+  final CollectionReference agendamentosCollection =
+      FirebaseFirestore.instance.collection('Agendamento');
 
-  // Adicionar AgendamentodicionarAgendamento
+  // Obtém o usuário autenticado (se existir)
+  firebase_auth.User? _getAuthenticatedUser() {
+    return _auth.currentUser;
+  }
+
+  // Adiciona um novo agendamento
   Future<void> adicionarAgendamento(Agendamento agendamento) async {
+    final firebase_auth.User? user = _getAuthenticatedUser();
+    if (user == null) {
+      throw Exception("Usuário não autenticado");
+    }
+
+    // Atribui o userId ao agendamento
+    agendamento.userId = user.uid;
+
     try {
-      // Adiciona um agendamento no Firestore
-      await _db.add(agendamento.toFirebase());
-      print("Agendamento adicionado com sucesso!");
+      await agendamentosCollection.add(agendamento.toFirebase());
     } catch (e) {
-      print("Erro ao adicionar agendamento: $e");
+      throw Exception("Erro ao adicionar agendamento: $e");
     }
   }
 
-  // Atualizar Agendamento
-  Future<void> updateAgendamento(Agendamento agendamento, String docId) async {
-    try {
-      // Atualiza o agendamento com o id especificado
-      await _db.doc(docId).update(agendamento.toFirebase());
-      print("Agendamento atualizado com sucesso!");
-    } catch (e) {
-      print("Erro ao atualizar agendamento: $e");
+  // Obtém os agendamentos do usuário autenticado
+  Future<List<Agendamento>> getAgendamentos() async {
+    final firebase_auth.User? user = _getAuthenticatedUser();
+    if (user == null) {
+      throw Exception("Usuário não autenticado");
     }
-  }
 
-// Método para obter os agendamentos de um usuário
-  Future<List<Agendamento>> getAgendamentos(String userId) async {
     try {
-      QuerySnapshot querySnapshot = await _db.where('userId', isEqualTo: userId).get();
-      return querySnapshot.docs.map((doc) => Agendamento.fromFirebase(doc)).toList();
-    } catch (e) {
-      print("Erro ao obter agendamentos: $e");
-      return [];
-    }
-  }
-
-  // Cancelar Agendamento e salvar notificação
-  Future<void> cancelarAgendamento(String docId, String nome, String userId) async {
-    try {
-      // Filtra as notificações para encontrar a notificação relacionada ao agendamento
-      QuerySnapshot notificacoesSnapshot = await _notificacoes
-          .where("nome", isEqualTo: nome)
-          .where('userId', isEqualTo: userId) // Filtra as notificações pelo userId
+      // Filtra os agendamentos pelo userId do usuário autenticado
+      QuerySnapshot querySnapshot = await agendamentosCollection
+          .where('userId', isEqualTo: user.uid) // Filtra pelo userId
           .get();
 
-      if (notificacoesSnapshot.docs.isNotEmpty) {
-        String notificacaoId = notificacoesSnapshot.docs.first.id;
-
-        // Chama o método da NotificacaoDB para cancelar o agendamento
-        await _notificacaoDB.cancelarAgendamento(notificacaoId, nome);
-        print("Notificação de cancelamento enviada.");
-      } else {
-        print("Nenhuma notificação encontrada para $nome.");
-      }
-
-      // Remove o agendamento do banco de dados
-      await _db.doc(docId).delete();
-      print("Consulta de $nome cancelada.");
+      return querySnapshot.docs
+          .map((doc) => Agendamento.fromFirebase(doc))
+          .toList();
     } catch (e) {
-      print("Erro ao cancelar agendamento: $e");
+      throw Exception("Erro ao buscar agendamentos: $e");
+    }
+  }
+
+  // Remove um agendamento
+  Future<void> cancelarAgendamento(String agendamentoId,String nome, String userId) async {
+    try {
+      await agendamentosCollection.doc(agendamentoId).delete();
+    } catch (e) {
+      throw Exception("Erro ao remover agendamento: $e");
     }
   }
 }

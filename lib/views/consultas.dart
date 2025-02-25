@@ -6,6 +6,7 @@ import 'package:agendamento/views/hometab.dart';
 import 'package:agendamento/views/hospitais.dart';
 import 'package:agendamento/views/medicos.dart';
 import 'package:agendamento/controller/agendamentoDBController.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class Consultas extends StatefulWidget {
   const Consultas({super.key});
@@ -16,17 +17,7 @@ class Consultas extends StatefulWidget {
 
 class _ConsultasState extends State<Consultas> {
   final AgendamentoDBController dbController = AgendamentoDBController();
-  final CollectionReference agendamentosCollection =
-      FirebaseFirestore.instance.collection("Agendamento");
-
-  String userId = 'exemplo_user_id'; // Substitua por seu método de obter o userId
-
-  void _navigateToScreen(Widget telas) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => telas),
-    );
-  }
+  String userId = FirebaseAuth.instance.currentUser?.uid ?? ''; // Obtendo o userId do usuário logado
 
   @override
   Widget build(BuildContext context) {
@@ -37,21 +28,26 @@ class _ConsultasState extends State<Consultas> {
         backgroundColor: Colors.blue[400],
       ),
       body: SafeArea(
-        child: StreamBuilder(
-          stream: agendamentosCollection.snapshots(),
-          builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        child: FutureBuilder<List<Agendamento>>(
+          future: dbController.getAgendamentos(), // Usando o método da classe AgendamentoDBController
+          builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            if (snapshot.hasError) {
+              return Center(child: Text("Erro: ${snapshot.error}"));
+            }
+
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return const Center(child: Text("Nenhuma consulta agendada."));
             }
 
-            return ListView(
+            return ListView.builder(
               padding: const EdgeInsets.all(16),
-              children: snapshot.data!.docs.map((doc) {
-                Agendamento agendamento = Agendamento.fromFirebase(doc);
+              itemCount: snapshot.data!.length,
+              itemBuilder: (context, index) {
+                Agendamento agendamento = snapshot.data![index];
                 return Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -63,11 +59,19 @@ class _ConsultasState extends State<Consultas> {
                         "Data: ${agendamento.data} • Hora: ${agendamento.hora}"),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _confirmarRemocao(doc.id, agendamento.nome ?? "Paciente", userId),
+                    onPressed: () {
+                      if (agendamento.userId == null || agendamento.userId!.isEmpty) {
+                      // Tratar o caso em que userId é nulo ou vazio
+                        print('Usuário não autenticado');
+                      } else {
+                        _confirmarRemocao(agendamento.id!, agendamento.nome ?? "Paciente");
+                      }
+                    },
+
                     ),
                   ),
                 );
-              }).toList(),
+              },
             );
           },
         ),
@@ -122,7 +126,14 @@ class _ConsultasState extends State<Consultas> {
     );
   }
 
-  void _confirmarRemocao(String docId, String nome, String userId) {
+  void _navigateToScreen(Widget telas) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => telas),
+    );
+  }
+
+  void _confirmarRemocao(String docId, String nome) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -136,7 +147,7 @@ class _ConsultasState extends State<Consultas> {
             ),
             TextButton(
               onPressed: () {
-                _cancelarAgendamento(docId, nome, userId);
+                _cancelarAgendamento(docId, nome);
                 Navigator.of(context).pop();
               },
               child: const Text("Sim"),
@@ -147,7 +158,7 @@ class _ConsultasState extends State<Consultas> {
     );
   }
 
-  void _cancelarAgendamento(String docId, String nome, String userId) {
+  void _cancelarAgendamento(String docId, String nome) {
     dbController.cancelarAgendamento(docId, nome, userId);
   }
 }

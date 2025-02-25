@@ -1,15 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:agendamento/model/notificacao.dart'; // Importe seu modelo Notificacao aqui
 
 class NotificacaoDB {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // Método para salvar notificação de agendamento
- Future<void> salvarNotificacao(String nome, String hora, String data) async {
+  Future<void> salvarNotificacao(String nome, String hora, String data) async {
     try {
       // Obtém o userId do usuário autenticado
       String? userId = FirebaseAuth.instance.currentUser?.uid;
-      
+
       if (userId != null) {
         // Adiciona a notificação com o userId
         await _db.collection('Notificacoes').add({
@@ -28,21 +29,19 @@ class NotificacaoDB {
     } catch (e) {
       print("Erro ao salvar notificação: $e");
     }
-  
-
   }
 
   // Método para atualizar a notificação quando a consulta for cancelada
   Future<void> cancelarAgendamento(String docId, String nome) async {
     try {
       DocumentReference docRef = _db.collection("Notificacoes").doc(docId);
-      
+
       // Verifica se o documento existe antes de atualizar
       DocumentSnapshot doc = await docRef.get();
       if (doc.exists) {
         // Verifica se a notificação pertence ao usuário logado
         String? userId = FirebaseAuth.instance.currentUser?.uid;
-        
+
         if (userId != null && doc['userId'] == userId) {
           // Atualiza a notificação para "cancelada"
           await docRef.update({
@@ -64,11 +63,11 @@ class NotificacaoDB {
   }
 
   // Método para buscar notificações de um usuário logado
-  Future<List<Map<String, dynamic>>> getNotificacoes() async {
+  Future<List<Notificacao>> getNotificacoes() async {
     try {
       // Obtém o userId do usuário autenticado
       String? userId = FirebaseAuth.instance.currentUser?.uid;
-      
+
       if (userId != null) {
         // Filtra as notificações pelo userId
         QuerySnapshot querySnapshot = await _db
@@ -76,7 +75,10 @@ class NotificacaoDB {
             .where('userId', isEqualTo: userId)
             .get();
 
-        return querySnapshot.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+        // Mapeia os documentos para uma lista de objetos Notificacao
+        return querySnapshot.docs
+            .map((doc) => Notificacao.fromFirebase(doc))
+            .toList();
       } else {
         print("Erro: Nenhum usuário logado.");
         return [];

@@ -45,7 +45,7 @@ class Agendamento {
 
   // Factory para criar um Agendamento a partir de um DocumentSnapshot do Firebase
   factory Agendamento.fromFirebase(DocumentSnapshot doc) {
-    final dados = doc.data()! as Map<String, dynamic>;
+    final dados = doc.data() as Map<String, dynamic>;
     return Agendamento(
       id: doc.id, // Pegando o ID gerado pelo Firestore
       userId: dados['userId'], // Pegando o ID do usuário do documento
